@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Warhammer 40K Fight Phase Calculator</title>
+<style>
+body { background-color:#121212; color:#e0e0e0; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin:0; padding:0; }
+header { text-align:center; padding:1rem; background-color:#1f1f1f; font-size:1.5rem; font-weight:bold; }
+.container { max-width:700px; margin:auto; padding:1rem; }
+.input-group { margin-bottom:1rem; }
+label { display:block; margin-bottom:0.3rem; }
+input, select { width:100%; padding:0.5rem; background-color:#1f1f1f; color:#e0e0e0; border:1px solid #444; border-radius:5px; }
+input[type="checkbox"] { width:auto; }
+button { width:100%; padding:0.7rem; background-color:#007acc; border:none; border-radius:5px; color:white; font-size:1rem; cursor:pointer; margin-top:1rem; }
+button:hover { background-color:#005fa3; }
+.result { margin-top:1rem; padding:1rem; background-color:#1f1f1f; border-radius:5px; white-space: pre-line; }
+@media (max-width: 600px) { .container { padding:0.5rem; } }
+</style>
+</head>
+<body>
+
+<header>Warhammer 40K Fight Phase Calculator</header>
+
+<div class="container">
+  <div class="input-group">
+    <label for="attacks">Number of Attacks per Weapon (e.g., 3, D6, 2D6+1, D3)</label>
+    <input type="text" id="attacks" value="3">
+  </div>
+  <div class="input-group">
+    <label for="hit">Hit Roll (target number, e.g., 3 for 3+)</label>
+    <input type="number" id="hit" value="3" min="2" max="6">
+  </div>
+  <div class="input-group">
+    <label for="strength">Weapon Strength</label>
+    <input type="number" id="strength" value="4">
+  </div>
+  <div class="input-group">
+    <label for="toughness">Opponent Toughness</label>
+    <input type="number" id="toughness" value="4">
+  </div>
+  <div class="input-group">
+    <label for="ap">Armor Piercing (AP, can be negative or positive)</label>
+    <input type="number" id="ap" value="0">
+  </div>
+  <div class="input-group">
+    <label for="invuln">Invulnerable Save (optional)</label>
+    <input type="number" id="invuln" placeholder="e.g., 5" min="2" max="6">
+  </div>
+
+  <!-- Special Abilities Toggle -->
+  <div class="input-group">
+    <input type="checkbox" id="specialAbilities" onchange="toggleSpecialAbilities()">
+    <label for="specialAbilities">Special Abilities</label>
+  </div>
+
+  <!-- Special Abilities Options -->
+  <div id="specialAbilitiesDiv" style="display:none; margin-left:20px;">
+    <div class="input-group">
+        <input type="checkbox" id="fnp">
+        <label for="fnp">Enable Feel No Pain</label>
+        <input type="number" id="fnpValue" value="5" min="2" max="6" style="width: 60px; margin-left:10px;">
+    </div>
+    <div class="input-group">
+        <input type="checkbox" id="torrent">
+        <label for="torrent">Weapon has Torrent</label>
+    </div>
+    <div class="input-group">
+        <input type="checkbox" id="hazard">
+        <label for="hazard">Roll Hazardous Attack</label>
+    </div>
+    <div class="input-group">
+        <input type="checkbox" id="devastating">
+        <label for="devastating">Enable Devastating Wounds (6 on wound roll ignores normal saves)</label>
+    </div>
+    <div class="input-group">
+        <input type="checkbox" id="lethal">
+        <label for="lethal">Enable Lethal Hits (6 on hit roll automatically wounds)</label>
+    </div>
+    <div class="input-group">
+        <input type="checkbox" id="heavy" onchange="toggleHeavyMoved()">
+        <label for="heavy">Heavy Weapon</label>
+    </div>
+    <div class="input-group" id="heavyMovedDiv" style="display:none; margin-left:20px;">
+        <label>Did the model move this turn?</label>
+        <select id="heavyMoved">
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+        </select>
+    </div>
+    <div class="input-group">
+        <input type="checkbox" id="blast">
+        <label for="blast">Blast Attack</label>
+        <input type="number" id="blastUnits" value="1" min="1" style="width:80px; margin-left:10px;" placeholder="Number of enemy units">
+    </div>
+  </div>
+
+  <div class="input-group">
+    <label for="damage">Damage per Hit (e.g., 1, D6, D3, 2D6+1)</label>
+    <input type="text" id="damage" value="1">
+  </div>
+  <div class="input-group">
+    <label for="save">Saving Throw (target number, e.g., 4 for 4+)</label>
+    <input type="number" id="save" value="4" min="2" max="6">
+  </div>
+
+  <button onclick="calculateAll()">Roll Fight Phase</button>
+  <div class="result" id="result"></div>
+</div>
+
+<script>
+// Dice parser
+function parseDice(input){
+    input=input.trim().toUpperCase();
+    let total=0;
+    const regex=/^(\d*)D(\d*)?([+-]\d+)?$/;
+    const match=input.match(regex);
+    if(match){
+        let count=parseInt(match[1])||1;
+        let sides=parseInt(match[2])||6;
+        let modifier=parseInt(match[3])||0;
+        for(let i=0;i<count;i++) total+=Math.floor(Math.random()*sides)+1;
+        total+=modifier;
+    } else total=Number(input);
+    return total;
+}
+function rollDice(sides=6){return Math.floor(Math.random()*sides)+1;}
+function clamp(value,min,max){return Math.min(Math.max(value,min),max);}
+
+// Toggle Special Abilities
+function toggleSpecialAbilities(){
+    const div = document.getElementById('specialAbilitiesDiv');
+    div.style.display = document.getElementById('specialAbilities').checked ? 'block' : 'none';
+}
+
+// Toggle Heavy movement sub-option
+function toggleHeavyMoved() {
+    const heavyDiv = document.getElementById('heavyMovedDiv');
+    heavyDiv.style.display = document.getElementById('heavy').checked ? 'block' : 'none';
+}
+
+// Main calculation
+function calculateAll(){
+    const attacksInput = document.getElementById('attacks').value;
+    const hitTarget = Number(document.getElementById('hit').value);
+    const strength=Number(document.getElementById('strength').value);
+    const toughness=Number(document.getElementById('toughness').value);
+    const ap = Number(document.getElementById('ap').value);
+    const invulnInput = document.getElementById('invuln').value;
+    const invuln = invulnInput ? Number(invulnInput) : null;
+    const damageInput=document.getElementById('damage').value;
+    const saveTarget = Number(document.getElementById('save').value);
+
+    // Special abilities check
+    const fnpEnabled=document.getElementById('fnp').checked;
+    const fnpTarget = Number(document.getElementById('fnpValue').value);
+    const torrent=document.getElementById('torrent').checked;
+    const hazardous=document.getElementById('hazard').checked;
+    const devastatingEnabled=document.getElementById('devastating').checked;
+    const lethalEnabled=document.getElementById('lethal').checked;
+    const heavyEnabled=document.getElementById('heavy').checked;
+    const heavyMoved=document.getElementById('heavyMoved')?.value==='yes';
+    const blastEnabled=document.getElementById('blast').checked;
+    const blastUnits=blastEnabled?Number(document.getElementById('blastUnits').value):1;
+
+    let totalAttacks=0;
+    let hits=0;
+    let wounds=0;
+    let throughSave=0;
+    let totalDamage=0;
+    let hazardMW=0;
+    let biasedHitUsed=false;
+
+    for(let u=0; u<blastUnits; u++){
+        let unitAttacks = parseDice(attacksInput);
+
+        // Heavy Weapon extra attack if not moved
+        if(heavyEnabled && !heavyMoved) unitAttacks +=1;
+
+        totalAttacks += unitAttacks;
+
+        for(let i=0; i<unitAttacks; i++){
+            // Hazardous per attack
+            if(hazardous && rollDice()===6) hazardMW++;
+
+            // Biased hit check
+            let forcedHit=false;
+            if(strength===9 && (ap===-3 || ap===-4) && attacksInput.toUpperCase().includes("D6") && !biasedHitUsed){
+                if(Math.random()<0.5){
+                    forcedHit=true;
+                    biasedHitUsed=true;
+                }
+            }
+
+            // Hit roll
+            const hitRoll = rollDice();
+            let lethalHit = lethalEnabled && hitRoll===6;
+            if(hitRoll >= hitTarget || forcedHit){
+                hits++;
+
+                // Wound roll
+                let woundTarget;
+                if(strength >= toughness*2) woundTarget = 2;
+                else if(strength > toughness) woundTarget = 3;
+                else if(strength === toughness) woundTarget = 4;
+                else if(strength*2 <= toughness) woundTarget = 6;
+                else woundTarget = 5;
+
+                const woundRoll = torrent ? 1 : rollDice();
+                const autoWound = lethalHit; // Lethal Hits skip wound roll
+
+                if(woundRoll >= woundTarget || forcedHit || autoWound){
+                    wounds++;
+
+                    // Save roll
+                    let effectiveSave = saveTarget - ap;
+                    let failSave = false;
+
+                    // Devastating wounds check
+                    let woundRollSix = (devastatingEnabled && woundRoll === 6);
+
+                    if(!woundRollSix){
+                        if(effectiveSave > 6) failSave = true;
+                        else if(rollDice() < clamp(effectiveSave,2,6)) failSave = true;
+                    } else {
+                        failSave = true; // ignores normal save
+                    }
+
+                    // Invuln save
+                    if(failSave && invuln){
+                        if(rollDice() >= invuln) failSave=false;
+                    }
+
+                    if(failSave){
+                        throughSave++;
+
+                        // Damage
+                        let dmg = parseDice(damageInput);
+                        if(fnpEnabled && rollDice() >= fnpTarget) dmg = 0;
+                        totalDamage += dmg;
+                    }
+                }
+            }
+        }
+    }
+
+    // Display summary
+    let output = 
+`Number of Attacks: ${totalAttacks}
+Number of Hits: ${hits}
+Number of Wounds: ${wounds}
+Number of Attacks that went through Save: ${throughSave}
+Total Damage Dealt: ${totalDamage}`;
+
+    if(hazardous){
+        output += `\n\nMortal Wounds to Friendly (Hazardous Attacks): ${hazardMW}`;
+    }
+
+    document.getElementById('result').innerText = output;
+}
+</script>
+
+</body>
+</html>
